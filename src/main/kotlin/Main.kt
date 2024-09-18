@@ -1,4 +1,5 @@
 import client.NewsApiClient
+import dsl.readme
 import enums.SortDirection
 import saver.NewsSaver
 import service.NewsService
@@ -17,4 +18,22 @@ fun main() {
     val mostRated = newsService.getMostRatedNews(news, 10, period)
 
     newsService.saveNews("news.csv" ,mostRated)
+
+    val result = readme {
+        introduction {
+            +"This is my first dsl on kotlin!!"
+        }
+        installation {
+            +"1. Installation guide"
+            +"2. Installation guide"
+        }
+        usage {
+            +"Some usage info"
+        }
+        license {
+            +"Fake licence:)"
+        }
+    }
+
+    result.saveToFile("customReadmeFromDSL.md")
 }
