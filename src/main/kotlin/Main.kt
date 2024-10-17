@@ -1,39 +1,58 @@
-import client.NewsApiClient
-import dsl.readme
-import enums.SortDirection
+import client.KtorNewsApiClient
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import model.News
+import mu.KotlinLogging
 import saver.NewsSaver
-import service.NewsService
-import java.time.LocalDate
+import worker.createWorkers
 
+suspend fun sequentialExecution(newsClient: KtorNewsApiClient, numberOfPages: Int, saver: NewsSaver, savePath: String): Long {
+    val logger = KotlinLogging.logger {}
+    logger.info { "starting sequential execution" }
+    val startTime = System.currentTimeMillis()
+    val allNews = mutableListOf<News>()
 
-fun main() {
-    val client = NewsApiClient();
-    val saver = NewsSaver();
-    val newsService = NewsService(client, saver);
+    for (page in 1..numberOfPages) {
+        val newsList = newsClient.getNews(page)
+        allNews.addAll(newsList)
+    }
 
-    val news = newsService.getNewsFromApi(sortDirection = SortDirection.DESC)
+    saver.saveNews(savePath, allNews)
 
-    val period = LocalDate.now().minusDays(100)..LocalDate.now()
+    val endTime = System.currentTimeMillis()
+    logger.info { "finished sequential execution after ${endTime - startTime} ms" }
+    return endTime - startTime
+}
 
-    val mostRated = newsService.getMostRatedNews(news, 10, period)
+fun main() = runBlocking {
+    val newsClient = KtorNewsApiClient()
+    val saver = NewsSaver()
+    val logger = KotlinLogging.logger {}
 
-    newsService.saveNews("news.csv" ,mostRated)
+    val countOfThreads = 6
+    val maxPages = 20
+    val maxConcurrentRequests = 5
+    val channel = Channel<List<News>>()
 
-    val result = readme {
-        introduction {
-            +"This is my first dsl on kotlin!!"
-        }
-        installation {
-            +"1. Installation guide"
-            +"2. Installation guide"
-        }
-        usage {
-            +"Some usage info"
-        }
-        license {
-            +"Fake licence:)"
+    val startTime = System.currentTimeMillis()
+
+    val workers = createWorkers(newsClient, channel, countOfThreads, maxPages)
+
+    val readerJob = GlobalScope.launch {
+        while (!channel.isClosedForReceive) {
+            val newsBatch = channel.receiveCatching().getOrNull()
+            if (newsBatch != null) {
+                saver.saveNews("src/main/resources/save.csv", newsBatch)
+            }
         }
     }
 
-    result.saveToFile("customReadmeFromDSL.md")
+    workers.forEach { it.join() }
+    channel.close()
+    readerJob.join()
+
+    val endTime = System.currentTimeMillis()
+    logger.info("Finished all threads in ${endTime - startTime} ms")
 }

@@ -3,29 +3,28 @@ package saver
 import model.News
 import mu.KotlinLogging
 import java.io.File
+import java.io.FileWriter
 import java.io.IOException
 
 class NewsSaver {
     private val logger = KotlinLogging.logger {}
+
     fun saveNews(path: String = "news.csv", news: Collection<News>) {
-        logger.info { "start to save news..." }
+        logger.info { "Start saving news..." }
         val validatedPath = validateAndPreparePath(path) ?: return
 
         val file = File(validatedPath)
 
-
-        if (file.exists()) {
-            logger.error { "File $validatedPath already exists." }
-            return
-        }
-
         try {
-            file.printWriter().use { out ->
-                out.println("id,publication_date,title,slug,place_id,description,site_url,favorites_count,comments_count,rating")
+            val fileExists = file.exists()
+            FileWriter(file, true).use { writer ->
+                if (!fileExists) {
+                    writer.appendLine("id,publication_date,title,slug,place_id,description,site_url,favorites_count,comments_count,rating")
+                }
 
                 news.forEach { newsItem ->
-                    out.println(
-                                "${newsItem.id}," +
+                    writer.appendLine(
+                        "${newsItem.id}," +
                                 "${newsItem.publicationDate}," +
                                 "${newsItem.title}," +
                                 "${newsItem.slug}," +
@@ -39,9 +38,9 @@ class NewsSaver {
                 }
             }
         } catch (e: IOException) {
-            logger.error { "Error saving news: " + e.printStackTrace() }
+            logger.error { "Error saving news: ${e.message}" }
         } finally {
-            logger.info { "finish saving news..." }
+            logger.info { "Finished saving news..." }
         }
     }
 
